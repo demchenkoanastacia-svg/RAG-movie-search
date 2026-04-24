@@ -16,7 +16,7 @@ import streamlit as st
 import numpy as np
 
 st.set_page_config(
-    page_title="My **MOVIE** RAG Knowledge Base",
+    page_title="My MOVIE RAG Knowledge Base",
     page_icon="🔍🎬",
     layout="wide",
 )
@@ -133,9 +133,9 @@ def get_vector_store(_documents: tuple):
     from langchain_text_splitters import RecursiveCharacterTextSplitter
     from langchain_community.vectorstores import Chroma
 
-    # --- Chunking ---
+    
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=300,
+        chunk_size=500,
         chunk_overlap=50,
         separators=["\n\n", "\n", ". ", " ", ""],
     )
@@ -151,11 +151,12 @@ def get_vector_store(_documents: tuple):
     embeddings = load_embedding_model()
 
     # --- Store in ChromaDB ---
+    import uuid
     vector_store = Chroma.from_texts(
         texts=chunks,
         embedding=embeddings,
         metadatas=metadatas,
-        collection_name="knowledge_base_v3",
+        collection_name=f"knowledge_base_{uuid.uuid4().hex}",
     )
     return vector_store, chunks
 
@@ -163,7 +164,7 @@ def get_vector_store(_documents: tuple):
 # ──────────────────────────────────────────────────────────────────────
 # SIDEBAR
 # ──────────────────────────────────────────────────────────────────────
-st.sidebar.title("My **MOVIE** RAG App")
+st.sidebar.title("My MOVIE RAG App")
 page = st.sidebar.radio("Navigate", ["🏠 Home", "🔍 Search", "📦 Explore Chunks", "🎬 Movie Database"], label_visibility="collapsed")
 
 # ──────────────────────────────────────────────────────────────────────
@@ -173,8 +174,8 @@ if page == "🏠 Home":
     # ─── INJECT BACKGROUND IMAGE FOR HOME PAGE ───
     import os
     import base64
-    if os.path.exists("background home.jpg"):
-        with open("background home.jpg", "rb") as f:
+    if os.path.exists("background.jpg"):
+        with open("background.jpg", "rb") as f:
             bg_ext = base64.b64encode(f.read()).decode()
         st.markdown(
             f"""
@@ -278,26 +279,27 @@ elif page == "🎬 Movie Database":
     st.title("Movie Database")
     st.markdown("Browse our library! More movies are comming soon...")
 
+    st.markdown("""
+    <style>
+    /* This targets images inside containers to keep them uniform */
+    .stImage img {
+        height: 400px;
+        width: 100%;
+        object-fit: cover;
+        border-radius: 10px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     # Create columns for a grid layout (3 columns wide)
     cols = st.columns(3)
     
     for i, doc in enumerate(DOCUMENTS):
         with cols[i % 3]:
-            # Use Streamlit's new stylized container feature to make a "card"
-            with st.container(border=True):
-                st.markdown("""
-                <style>
-                /* This targets images inside containers to keep them uniform */
-                .stImage img {
-                    max-height: 400px;
-                    object-fit: cover;
-                    border-radius: 10px;
-                }
-                </style>
-                """, unsafe_allow_html=True)
-                # Placeholder poster matching the dark blue aesthetic
+            # Use Streamlit's new stylized container feature to make a "card", setting uniform height
+            with st.container(height=650, border=True):
                 placeholder_url = doc['poster']
-                st.image(placeholder_url, width=300)
+                st.image(placeholder_url, use_container_width=True)
                 
                 st.subheader(doc['title'])
                 st.caption(f"**Genre:** {doc['genre']}")
