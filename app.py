@@ -15,6 +15,13 @@ Instructions:
 import streamlit as st
 import numpy as np
 
+#Memory check for render
+import tracemalloc, os, psutil
+
+tracemalloc.start()
+process = psutil.Process(os.getpid())
+st.sidebar.metric("RAM used (MB)", f"{process.memory_info().rss / 1024**2:.1f}")
+
 st.set_page_config(
     page_title="My MOVIE RAG Knowledge Base",
     page_icon="🔍🎬",
@@ -123,15 +130,19 @@ DOCUMENTS = [
 
 @st.cache_resource(show_spinner="Loading embedding model...")
 def load_embedding_model():
-    from langchain_huggingface import HuggingFaceEmbeddings
-    return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+#    from langchain_huggingface import HuggingFaceEmbeddings
+#    return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
+    return DefaultEmbeddingFunction()
 
 
 @st.cache_resource(show_spinner="Building vector database...")
 def get_vector_store(_documents: tuple):
     """Chunk documents, embed them, and store in ChromaDB."""
     from langchain_text_splitters import RecursiveCharacterTextSplitter
-    from langchain_community.vectorstores import Chroma
+#    from langchain_community.vectorstores import Chroma
+    import chromadb
+    
 
     
     splitter = RecursiveCharacterTextSplitter(
@@ -148,17 +159,30 @@ def get_vector_store(_documents: tuple):
         # Attach the title to every single chunk of this movie
         metadatas.extend([{"title": doc["title"]}] * len(split_plots))
 
-    embeddings = load_embedding_model()
+    #embeddings = load_embedding_model()
+    ef = load_embedding_model()
+    client = chromadb.Client()
+    collection = client.get_or_create_collection(
+    name="knowledge_base_movies",
+    embedding_function=ef,
+    )
+    collection.add(
+        documents=chunks,
+        metadatas=metadatas,
+        ids=[str(i) for i in range(len(chunks))],
+    )
+    return collection, chunks
+
 
     # --- Store in ChromaDB ---
-    import uuid
-    vector_store = Chroma.from_texts(
-        texts=chunks,
-        embedding=embeddings,
-        metadatas=metadatas,
-        collection_name=f"knowledge_base_{uuid.uuid4().hex}",
-    )
-    return vector_store, chunks
+#    import uuid
+#    vector_store = Chroma.from_texts(
+#        texts=chunks,
+#        embedding=embeddings,
+#        metadatas=metadatas,
+#        collection_name="knowledge_base_movies",
+#    )
+#    return vector_store, chunks
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -227,24 +251,37 @@ elif page == "🔍 Search":
 
     query = st.text_input(
         "Your question",
-        placeholder="e.g. What is the name of the movie where boy's nose grows when he lies?",
+        placeholder="Search for a movie plot (e.g., 'space explorations')",
     )
     num_results = st.slider("Number of results", 1, 10, 3)
 
     if query:
         with st.spinner("Searching..."):
-            results = vector_store.similarity_search_with_score(query, k=num_results)
+            results = vector_store.query(query_texts=[query], n_results=num_results)
+            #results = vector_store.similarity_search_with_score(query, k=num_results)
 
-        st.subheader(f"Top {len(results)} results")
-        for i, (doc, score) in enumerate(results, 1):
+#        st.subheader(f"Top {len(results)} results")
+        st.subheader(f"Top {num_results} results")
+        for i, (text, meta, dist) in enumerate(zip(
+            results["documents"][0],
+            results["metadatas"][0],
+            results["distances"][0],
+        ), 1):
+            similarity = 1.0 / (1.0 + dist)
+            with st.container():
+                st.markdown(f"**Result {i}**: {meta.get('title', 'Unknown')} — relevance: `{similarity:.2f}`")
+                st.markdown(f"> {text}")
+                st.divider()
+
+#        for i, (doc, score) in enumerate(results, 1):
             # ChromaDB returns L2 distance (typically 0.0 to 2.0+ for text); lower = more similar
             # Use inverse distance to convert it to a 0.0-1.0 similarity scale:
-            similarity = 1.0 / (1.0 + score)
-            movie_title = doc.metadata.get("title", "Unknown Title")
-            with st.container():
-                st.markdown(f"**Result {i}**: {movie_title} — relevance: `{similarity:.2f}`")
-                st.markdown(f"> {doc.page_content}")
-                st.divider()
+#            similarity = 1.0 / (1.0 + score)
+#            movie_title = doc.metadata.get("title", "Unknown Title")
+#            with st.container():
+#                st.markdown(f"**Result {i}**: {movie_title} — relevance: `{similarity:.2f}`")
+#                st.markdown(f"> {doc.page_content}")
+#                st.divider()
 
     st.markdown("---")
     st.caption("Powered by all-MiniLM-L6-v2 embeddings + ChromaDB")
