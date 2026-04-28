@@ -15,12 +15,6 @@ Instructions:
 import streamlit as st
 import numpy as np
 
-#Memory check for render
-import tracemalloc, os, psutil
-
-tracemalloc.start()
-process = psutil.Process(os.getpid())
-st.sidebar.metric("RAM used (MB)", f"{process.memory_info().rss / 1024**2:.1f}")
 
 st.set_page_config(
     page_title="My MOVIE RAG Knowledge Base",
